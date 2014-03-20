@@ -12,7 +12,7 @@ randomized trees. Single and multi-output problems are both handled.
 # Licence: BSD 3 clause
 
 from __future__ import division
-
+from scipy.sparse import csc_matrix, csr_matrix, coo_matrix
 import numbers
 import numpy as np
 from abc import ABCMeta, abstractmethod
@@ -23,13 +23,29 @@ from ..externals import six
 from ..externals.six.moves import xrange
 from ..feature_selection.from_model import _LearntSelectorMixin
 from ..utils import array2d, check_random_state
+#from ..utils.fixes import unique
 from ..utils.validation import check_arrays
+
+#from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
+#from sklearn.externals import six
+#from sklearn.externals.six.moves import xrange
+#from sklearn.feature_selection.from_model import _LearntSelectorMixin
+#from sklearn.utils import array2d, check_random_state
+#from sklearn.utils.fixes import unique
+#from sklearn.utils.validation import check_arrays
+
 
 from ._tree import Criterion
 from ._tree import Splitter
 from ._tree import DepthFirstTreeBuilder, BestFirstTreeBuilder
 from ._tree import Tree
 from . import _tree
+
+#from sklearn.tree._tree import Criterion
+#from sklearn.tree._tree import Splitter
+#from sklearn.tree._tree import DepthFirstTreeBuilder, BestFirstTreeBuilder
+#from sklearn.tree._tree import Tree
+#from sklearn.tree import _tree
 
 __all__ = ["DecisionTreeClassifier",
            "DecisionTreeRegressor",
@@ -81,7 +97,6 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
         self.max_features = max_features
         self.random_state = random_state
         self.max_leaf_nodes = max_leaf_nodes
-
         self.n_features_ = None
         self.n_outputs_ = None
         self.classes_ = None
@@ -123,7 +138,6 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
             Returns self.
         """
         random_state = check_random_state(self.random_state)
-
         # Deprecations
         if sample_mask is not None:
             warn("The sample_mask parameter is deprecated as of version 0.14 "
@@ -133,8 +147,12 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
             warn("The X_argsorted parameter is deprecated as of version 0.14 "
                  "and will be removed in 0.16.", DeprecationWarning)
 
+        # Convert to csc format if the matrix is sparse and is coo or csr
+        if isinstance(X, csr_matrix) or isinstance(X, coo_matrix):
+            X = X.tocsc()
+
         # Convert data
-        if check_input:
+        if check_input and not isinstance(X, csc_matrix):
             X, = check_arrays(X, dtype=DTYPE, sparse_format="dense")
 
         # Determine output settings
@@ -149,7 +167,24 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
             y = np.reshape(y, (-1, 1))
 
         self.n_outputs_ = y.shape[1]
-
+        '''
+        if self.balance == "auto":
+            print "Balancing data"
+            if sample_weight is None:
+                sample_weight = np.ones((y.shape[0],), dtype=np.float64)
+            pos = 0.0
+            neg = 0.0
+            for i in xrange(len(sample_weight)):
+                if y[i] == 1:
+                    pos += sample_weight[i]
+                else:
+                    neg += sample_weight[i]
+            for i in xrange(len(sample_weight)):
+                if y[i] == 1:
+                    sample_weight[i] *= 1.0/pos
+                else:
+                    sample_weight[i] *= 1.0/neg
+        '''
         if is_classification:
             y = np.copy(y)
 
@@ -205,6 +240,7 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
         if self.min_samples_split <= 0:
             raise ValueError("min_samples_split must be greater than zero.")
         if self.min_samples_leaf <= 0:
+            raise ValueError("min_samples_leaf must be greater than zero.")
             raise ValueError("min_samples_leaf must be greater than zero.")
         if max_depth <= 0:
             raise ValueError("max_depth must be greater than zero. ")
@@ -262,7 +298,11 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
         else:
             builder = BestFirstTreeBuilder()
 
-        builder.build(self.tree_, X, y, sample_weight)
+        if isinstance(X, csc_matrix):
+            builder.build_sparse(self.tree_, X.data, X.indices,
+                                 X.indptr, X.shape[1], y, sample_weight)
+        else:
+            builder.build(self.tree_, X, y, sample_weight)
 
         if self.n_outputs_ == 1:
             self.n_classes_ = self.n_classes_[0]
@@ -287,6 +327,7 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
         y : array of shape = [n_samples] or [n_samples, n_outputs]
             The predicted classes, or the predict values.
         """
+
         if getattr(X, "dtype", None) != DTYPE or X.ndim != 2:
             X = array2d(X, dtype=DTYPE)
 
@@ -463,6 +504,7 @@ class DecisionTreeClassifier(BaseDecisionTree, ClassifierMixin):
                  min_density=None,
                  compute_importances=None,
                  max_leaf_nodes=None):
+
         super(DecisionTreeClassifier, self).__init__(
             criterion=criterion,
             splitter=splitter,

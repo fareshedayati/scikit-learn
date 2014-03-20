@@ -101,6 +101,19 @@ the class labels for the training samples::
     >>> clf = tree.DecisionTreeClassifier()
     >>> clf = clf.fit(X, Y)
 
+Note that X can be a sparse matrix of the form :class:`csc_matrix` or :class:`csr_matrix` or :class:`coo_matrix` from `scipy.sparse`. As a matter of fact, sparsity significantly decreases the training time::
+
+    >>> from sklearn import tree
+    >>> from scipy.sparse import csc_matrix
+    >>> indptr = array([0,2,3,6])
+    >>> indices = array([0,2,2,0,1,2])
+    >>> data = array([1,2,3,4,5,6])
+    >>> X = csc_matrix( (data,indices,indptr), shape=(3,3) ).todense()
+    >>> Y = [0, 1, 1]
+    >>> clf = tree.DecisionTreeClassifier()
+    >>> clf = clf.fit(X, Y)
+
+
 After being fitted, the model can then be used to predict new values::
 
     >>> clf.predict([[2., 2.]])
@@ -291,6 +304,8 @@ relevant samples, and retaining a running label count, we reduce the complexity
 at each node to :math:`O(n_{features}\log(n_{samples}))`, which results in a
 total cost of :math:`O(n_{features}n_{samples}\log(n_{samples}))`.
 
+The bottleneck of the training part is sorting samples along a given feature :math:`f`. This takes :math:`O(n_{samples}\log(n_{samples}))`, however if the samples matrix X is sparse, the positive and negative values of a feature are sorted separately and indices of the samples are rearranged accordingly. The running time of this new sorting algorithm is :math:`O(n_{+}\log(n_{+}) + n_{-}\log(n_{-}))`, where :math:`n_{-}` and :math:`n_{+}` are the number of samples that have positive and negative values for :math:`f` respectively. If the sparsity is high then :math:`n_{-} + n_{+}` is much less than :math:`n_{smaples}` and there would be a huge reduction in training time. 
+
 
 Tips on practical use
 =====================
@@ -325,7 +340,8 @@ Tips on practical use
 
   * All decision trees use ``np.float32`` arrays internally.
     If training data is not in this format, a copy of the dataset will be made.
-
+   
+  * When working with sparse data such as text in NLP projects, pass the training samples X as a sparse matrix. The training time could decrease by a two digit factor (somewhere between 5 to 40, depending on the sparsity of the data).
 
 .. _tree_algorithms:
 

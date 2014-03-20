@@ -3,7 +3,7 @@
 #          Brian Holt <bdholt1@gmail.com>
 #          Joel Nothman <joel.nothman@gmail.com>
 #          Arnaud Joly <arnaud.v.joly@gmail.com>
-#
+#          Fares Hedayati <fareshedayat@yahoo.com>
 # Licence: BSD 3 clause
 
 # See _tree.pyx for details.
@@ -16,8 +16,6 @@ ctypedef np.npy_float64 DOUBLE_t         # Type of y, sample_weight
 ctypedef np.npy_intp SIZE_t              # Type for indices and counters
 ctypedef np.npy_int32 INT32_t            # Signed 32 bit integer
 ctypedef np.npy_uint32 UINT32_t          # Unsigned 32 bit integer
-
-
 
 # =============================================================================
 # Criterion
@@ -57,7 +55,6 @@ cdef class Criterion:
     cdef void node_value(self, double* dest) nogil
     cdef double impurity_improvement(self, double impurity) nogil
 
-
 # =============================================================================
 # Splitter
 # =============================================================================
@@ -77,6 +74,12 @@ cdef class Splitter:
     cdef SIZE_t* constant_features       # Constant features indices
     cdef SIZE_t n_features               # X.shape[1]
     cdef DTYPE_t* feature_values         # temp. array holding feature values
+    cdef DTYPE_t* current_col            # temp. array holding feature values
+    cdef UINT32_t* index_to_color
+    cdef SIZE_t* tmp_indices              # temp. array of indices
+    cdef SIZE_t* hyper_indices              # temp. array of indices
+
+    cdef UINT32_t current_color
     cdef SIZE_t start                    # Start position for the current node
     cdef SIZE_t end                      # End position for the current node
 
@@ -87,11 +90,17 @@ cdef class Splitter:
     cdef SIZE_t y_stride
     cdef DOUBLE_t* sample_weight
 
+    cdef DOUBLE_t* data
+    cdef SIZE_t* indices
+    cdef SIZE_t* indptr
+    cdef SIZE_t data_stride
+    cdef SIZE_t indices_stride
+    cdef SIZE_t indptr_stride
+
     # The samples vector `samples` is maintained by the Splitter object such
     # that the samples contained in a node are contiguous. With this setting,
     # split reorganizes the node samples `samples[start:end]` in two
     # subsets `samples[start:pos]` and `samples[pos:end]`.
-
     # The 1-d  `features` array of size n_features contains the features
     # indices and allows fast sampling without replacement of features.
 
@@ -108,6 +117,12 @@ cdef class Splitter:
                          np.ndarray y,
                          DOUBLE_t* sample_weight)
 
+    cdef void init_sparse(self, np.ndarray y,
+                          np.ndarray data,
+                          np.ndarray indices,
+                          np.ndarray indptr,
+                          DOUBLE_t* sample_weight, int number_of_features)
+
     cdef void node_reset(self, SIZE_t start, SIZE_t end) nogil
 
     cdef void node_split(self, double impurity,  # Impurity of the node
@@ -119,8 +134,14 @@ cdef class Splitter:
                                double* impurity_improvement,
                                SIZE_t* n_constant_features) nogil
 
-    cdef void node_value(self, double* dest) nogil
+    cdef void node_split_sparse(self, double impurity, SIZE_t* pos,
+                                SIZE_t* feature, double* threshold,
+                                double* impurity_left, double* impurity_right,
+                                double* impurity_improvement,
+                                SIZE_t* n_constant_features,
+                                SIZE_t number_of_features) nogil
 
+    cdef void node_value(self, double* dest) nogil
 
 # =============================================================================
 # Tree
@@ -138,7 +159,6 @@ cdef struct Node:
     DOUBLE_t impurity
     SIZE_t n_samples
     DOUBLE_t weighted_n_samples
-
 
 cdef class Tree:
     # Input/Output layout
@@ -182,7 +202,6 @@ cdef class Tree:
     cpdef np.ndarray apply(self, np.ndarray[DTYPE_t, ndim=2] X)
     cpdef compute_feature_importances(self, normalize=*)
 
-
 # =============================================================================
 # Tree builder
 # =============================================================================
@@ -191,12 +210,17 @@ cdef class TreeBuilder:
      cpdef build(self, Tree tree, np.ndarray X, np.ndarray y,
                  np.ndarray sample_weight=*)
 
-
 cdef class DepthFirstTreeBuilder(TreeBuilder):
      cpdef build(self, Tree tree, np.ndarray X, np.ndarray y,
                  np.ndarray sample_weight=*)
-
+     cpdef build_sparse(self, Tree tree,  np.ndarray data, np.ndarray indices,
+                       np.ndarray indptr, SIZE_t number_of_features,
+                       np.ndarray y, np.ndarray sample_weight)
 
 cdef class BestFirstTreeBuilder(TreeBuilder):
      cpdef build(self, Tree tree, np.ndarray X, np.ndarray y,
                  np.ndarray sample_weight=*)
+
+     cpdef build_sparse(self, Tree tree,  np.ndarray data, np.ndarray indices,
+                       np.ndarray indptr, SIZE_t number_of_features,
+                       np.ndarray y, np.ndarray sample_weight)
